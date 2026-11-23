@@ -1,0 +1,219 @@
+# Installed by AIRoundTable Delivery Lab: controlled releases (DL4).
+# Every commit on main is built and checked once, packaged with a
+# SHA-256 digest, deployed to staging, checked again, and deployed to
+# production only after a required reviewer approves the production
+# environment. Delivery Lab never merges changes to this file automatically.
+# Set up the staging and production environments as the Delivery Lab
+# release runbook describes before merging.
+name: Delivery release
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: deploy (staging, then production after approval) or rollback (production to its previous release, after approval)
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+        required: true
+      ref:
+        description: 'Full commit SHA to deploy; empty means the head of main'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'push' || inputs.mode == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.pack.outputs.sha }}
+      digest: ${{ steps.pack.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+      - name: Set up
+        run: |
+          if [ -f package-lock.json ]; then npm ci; elif [ -f package.json ]; then npm install; fi
+      - name: Check
+        run: |
+          npm test
+      - name: Build
+        run: if [ -f package.json ]; then npm run build --if-present; fi
+      - name: Package
+        id: pack
+        run: |
+          set -euo pipefail
+          out=.
+          if [ -f package.json ] && [ -d dist ]; then out=dist; fi
+          tar --sort=name --mtime='UTC 2000-01-01' --owner=0 --group=0 --numeric-owner \
+            --exclude=.git --exclude=node_modules --exclude=.github \
+            -cf - -C "$out" . | gzip -n > "$RUNNER_TEMP/release.tgz"
+          sha=$(git rev-parse HEAD)
+          digest=$(sha256sum "$RUNNER_TEMP/release.tgz" | cut -d' ' -f1)
+          printf '{"repository":"%s","sha":"%s","digest":"sha256:%s","run":"%s","built":"%s"}\n' \
+            "$GITHUB_REPOSITORY" "$sha" "$digest" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > "$RUNNER_TEMP/release.json"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.pack.outputs.sha }}-${{ steps.pack.outputs.digest }}
+          path: |
+            ${{ runner.temp }}/release.tgz
+            ${{ runner.temp }}/release.json
+          retention-days: 90
+          if-no-files-found: error
+
+  staging:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: ${{ vars.SITE_URL }}
+    steps:
+      - name: Download the release
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.sha }}-${{ needs.build.outputs.digest }}
+          path: release
+      - name: Verify the artifact digest
+        run: echo "${{ needs.build.outputs.digest }}  release/release.tgz" | sha256sum --check --strict -
+      - name: Prepare SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_SSH_KEY" || { echo "::error::Add the DEPLOY_SSH_KEY secret to the staging environment."; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "::error::Add the DEPLOY_KNOWN_HOSTS variable to the staging environment."; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy to staging
+        env:
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_TARGET" "deploy ${{ needs.build.outputs.sha }} ${{ needs.build.outputs.digest }}" < release/release.tgz
+      - name: Check the staging site
+        if: vars.SITE_URL != ''
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 --retry 5 --retry-delay 3 \
+            "${SITE_URL%/}/release.json" | grep -q '"${{ needs.build.outputs.sha }}"'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+      - name: Set up for acceptance checks
+        run: |
+          if [ -f package-lock.json ]; then npm ci; elif [ -f package.json ]; then npm install; fi
+      - name: Acceptance checks
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -f package.json ] && grep -q '"test:acceptance"' package.json; then
+            npm run test:acceptance
+          else
+            echo "No test:acceptance script; the staging site check above is the acceptance gate."
+          fi
+
+  production:
+    needs: [build, staging]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.SITE_URL }}
+    steps:
+      - name: Download the release
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.sha }}-${{ needs.build.outputs.digest }}
+          path: release
+      - name: Verify the artifact digest
+        run: echo "${{ needs.build.outputs.digest }}  release/release.tgz" | sha256sum --check --strict -
+      - name: Prepare SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_SSH_KEY" || { echo "::error::Add the DEPLOY_SSH_KEY secret to the production environment."; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "::error::Add the DEPLOY_KNOWN_HOSTS variable to the production environment."; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy to production
+        env:
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_TARGET" "deploy ${{ needs.build.outputs.sha }} ${{ needs.build.outputs.digest }}" < release/release.tgz
+      - name: Check the production site
+        if: vars.SITE_URL != ''
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 --retry 5 --retry-delay 3 \
+            "${SITE_URL%/}/release.json" | grep -q '"${{ needs.build.outputs.sha }}"'
+      - name: Roll back a failed production deployment
+        if: failure()
+        env:
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          # Only acts if production is on this release; otherwise it changes nothing.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_TARGET" "rollback ${{ needs.build.outputs.sha }}" < /dev/null || true
+
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'rollback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ vars.SITE_URL }}
+    steps:
+      - name: Prepare SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Roll production back to its previous release
+        env:
+          DEPLOY_TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_TARGET" rollback < /dev/null
