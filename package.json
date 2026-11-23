@@ -1,0 +1,13 @@
+{
+  "name": "delivery-lab-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway repository for trying AIRoundTable Delivery Lab repository runs.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
