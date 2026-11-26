@@ -4,13 +4,16 @@ Single-page calculator: add, subtract, multiply, divide, decimal entry, equals a
 
 ## Module interface (src/calculator.mjs)
 
-Pure functions, no DOM access. State objects are immutable; every call returns a new state.
+Pure functions, no DOM access. State objects are treated as immutable: no function ever mutates a state it receives.
 
-- `createState()` returns the initial state, whose display is `"0"`.
-- `press(state, key)` returns the next state. Unknown keys return the state unchanged.
+- `createState()` returns a new initial state, whose display is `"0"`.
+- `press(state, key)` returns the next state.
+  - If the key changes the state, it returns a new object.
+  - If the key is ignored, it returns the same state object it was given (reference-equal, `press(s, k) === s`). Ignored keys are: unknown keys, any key except `C` while in the error state, a 13th digit, a second `.` in one entry, and `=` with no pending operator.
+  - A key that is accepted but produces an equivalent state (for example `C` from the initial state) still returns a new object.
 - `getDisplay(state)` returns the display string.
 - `formatNumber(n)` returns the display string for a finite number (see Result formatting).
-- `keyFromEvent(event)` returns a calculator key for a keyboard event (`{ key }`), or `null` if the key is unmapped.
+- `keyFromEvent(event)` returns a calculator key for a keyboard event (`{ key, ctrlKey, metaKey, altKey }`), or `null` if the key is unmapped. Missing modifier fields count as false.
 
 State shape: `{ display: string, accumulator: number|null, operator: string|null, waiting: boolean, error: boolean }`.
 
@@ -34,25 +37,27 @@ On-screen buttons show the symbols +, −, ×, ÷, = and C, but call `press` wit
 | `Escape` | `C` |
 | anything else | ignored (`null`) |
 
-The app calls `preventDefault()` for mapped keys, so that `/` does not open browser quick find and Enter does not re-activate a focused button. Modifier combinations (Ctrl, Meta, Alt) are not mapped.
+The app calls `preventDefault()` for mapped keys, so that `/` does not open browser quick find and Enter does not re-activate a focused button. Modifier combinations (Ctrl, Meta, Alt) are not mapped (`null`).
 
 ## Rules
 
 1. Initial display is `0`.
-2. Digit: if the display is `0` or a new entry is waiting, it replaces the display; otherwise it appends. Entry is limited to 12 digits; extra digits are ignored.
+2. Digit: if the display is `0` or a new entry is waiting, it replaces the display; otherwise it appends. Entry is limited to 12 digits (the decimal point does not count); extra digits are ignored.
 3. Decimal point: if a new entry is waiting it gives `0.`; if the entry already has a `.`, the key is ignored; otherwise it appends `.`.
 4. Operator: if an operator is pending and an operand was entered, the pending operation is evaluated first, the result is shown and the new operator becomes pending. If no operand was entered since the last operator, the pending operator is replaced. With no previous value, the displayed value (initially 0) becomes the left operand.
-5. Equals: if an operator is pending, evaluate it and show the result; the operator is cleared. With no pending operator, equals does nothing. Repeated equals does not repeat the operation.
+5. Equals: if an operator is pending, evaluate it and show the result; the operator is cleared. With no pending operator, equals is ignored. If the right operand is missing, the displayed value is used. Repeated equals does not repeat the operation.
 6. A digit after equals starts a new entry; an operator after equals continues from the result.
 7. Clear (`C`, Escape): resets to the initial state, display `0`, from any state including error.
 8. Division by zero: display `Cannot divide by zero`, error state set. All keys except `C` are ignored until cleared.
 
 ## Result formatting
 
+One precision rule applies everywhere: results carry at most 12 significant digits.
+
 - Round to 12 significant digits (`Number(n.toPrecision(12))`) to remove floating point noise, then print without trailing zeros. So 0.1 + 0.2 shows `0.3`.
 - Integers show no decimal point (`4`, not `4.0`).
 - Negative results use a leading `-`. Negative zero shows `0`.
-- If the absolute value is at least 1e12, or nonzero and below 1e-9, use exponential notation with up to 6 fraction digits and no trailing zeros (for example `1e+12`).
+- If the absolute value is at least 1e12, or nonzero and below 1e-9, use exponential notation: the mantissa has at most 12 significant digits (up to 11 fraction digits) with trailing zeros removed, followed by `e`, a sign and the exponent (for example `1e+12`, `9.99999999999e+12`, `1e-10`).
 - Typed entries are shown as typed (`1.`, `1.50`) until an operator or equals is pressed.
 
 ## Behavior table
@@ -79,7 +84,7 @@ Each row starts from the cleared state. Keys are pressed in order and the final 
 | 2 + 3 * | `5` | chaining shows the intermediate result |
 | 2 + * 3 = | `6` | operator replaced; 2 * 3 |
 | 1 0 - 2 - 3 = | `5` | |
-| 5 = | `5` | equals with no operator does nothing |
+| 5 = | `5` | equals with no operator is ignored |
 | 2 + 3 = = | `5` | no repeat |
 | 2 + 3 = * 4 = | `20` | continue from result |
 | 2 + 3 = 7 | `7` | digit after equals starts new entry |
