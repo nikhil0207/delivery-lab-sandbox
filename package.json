@@ -5,9 +5,13 @@
   "type": "module",
   "description": "Throwaway repository for trying AIRoundTable Delivery Lab repository runs.",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "check": "node src/duration.mjs"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "ms": "^2.1.3"
   }
 }
