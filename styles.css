@@ -1,0 +1,144 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f1f3f6;
+  --panel: #ffffff;
+  --text: #14181f;
+  --key: #e4e8ee;
+  --key-op: #c9d7f5;
+  --key-eq: #1d4ed8;
+  --key-eq-text: #ffffff;
+  --key-clear: #f8d4d4;
+  --focus: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151a;
+    --panel: #1c2128;
+    --text: #f1f3f6;
+    --key: #323a45;
+    --key-op: #3a4d78;
+    --key-eq: #3b82f6;
+    --key-eq-text: #0b1020;
+    --key-clear: #6b3030;
+    --focus: #fbbf24;
+  }
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.calculator {
+  width: 100%;
+  max-width: 360px;
+  padding: 12px;
+  background: var(--panel);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.calculator h1 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.display-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+}
+
+.display {
+  display: block;
+  width: 100%;
+  min-height: 3.5rem;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 2px solid var(--key);
+  border-radius: 8px;
+  font-size: 1.75rem;
+  line-height: 2.5rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.key {
+  min-height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--key);
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.key:hover {
+  filter: brightness(0.95);
+}
+
+.key:active {
+  transform: translateY(1px);
+}
+
+.key-op {
+  background: var(--key-op);
+}
+
+.key-clear {
+  background: var(--key-clear);
+}
+
+.key-eq {
+  background: var(--key-eq);
+  color: var(--key-eq-text);
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.row-2 {
+  grid-row: span 2;
+}
+
+.key:focus-visible,
+.display:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+  .calculator {
+    padding: 8px;
+  }
+
+  .keys {
+    gap: 6px;
+  }
+
+  .display {
+    font-size: 1.5rem;
+  }
+}
