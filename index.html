@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calculator</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="src/app.mjs"></script>
+</head>
+<body>
+  <main class="calculator" aria-labelledby="calc-title">
+    <h1 id="calc-title">Calculator</h1>
+    <label class="display-label" for="display">Display</label>
+    <output id="display" class="display" role="status" aria-live="polite" aria-atomic="true">0</output>
+    <div class="keys">
+      <button type="button" class="key key-clear span-2" data-key="C" aria-label="Clear">C</button>
+      <button type="button" class="key key-op" data-key="/" aria-label="Divide">&divide;</button>
+      <button type="button" class="key key-op" data-key="*" aria-label="Multiply">&times;</button>
+
+      <button type="button" class="key" data-key="7">7</button>
+      <button type="button" class="key" data-key="8">8</button>
+      <button type="button" class="key" data-key="9">9</button>
+      <button type="button" class="key key-op" data-key="-" aria-label="Subtract">&minus;</button>
+
+      <button type="button" class="key" data-key="4">4</button>
+      <button type="button" class="key" data-key="5">5</button>
+      <button type="button" class="key" data-key="6">6</button>
+      <button type="button" class="key key-op" data-key="+" aria-label="Add">+</button>
+
+      <button type="button" class="key" data-key="1">1</button>
+      <button type="button" class="key" data-key="2">2</button>
+      <button type="button" class="key" data-key="3">3</button>
+      <button type="button" class="key key-eq row-2" data-key="=" aria-label="Equals">=</button>
+
+      <button type="button" class="key span-2" data-key="0">0</button>
+      <button type="button" class="key" data-key="." aria-label="Decimal point">.</button>
+    </div>
+  </main>
+</body>
+</html>
