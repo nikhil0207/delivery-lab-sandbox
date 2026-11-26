@@ -2,54 +2,64 @@
 
 Owner-review checklist for the integrated calculator.
 
-- **PASS (automated)**: observed by running code in the sandbox.
-- **NOT RUN**: needs a real browser, which the sandbox does not provide. The owner must check these by hand.
+- **PASS**: observed in the stated environment.
+- **NOT RUN**: not checked. Unverified, not passed.
 
 ## Test command
 
 `npm test` (runs `node --test`). Result: 29 tests, 29 pass, 0 fail. Node v22.
 
-Additional check: a throwaway script drove `src/calculator.mjs` (`press`, `keyFromEvent`, `getDisplay`) with each criterion's key sequence. The script lived outside the repository.
-
 ## Browsers and viewport widths
+
+The UI checks ran in a real browser engine: headless Chromium 158.0.8127.0, driven by playwright-core with the `@sparticuz/chromium` build. The repository root was served over local HTTP and `index.html` was loaded with its real CSS and ES modules. Interactions used real Playwright clicks and real keyboard presses. The page reported no uncaught page errors.
 
 | Browser | Viewport width | Status |
 |---|---|---|
-| Chrome (current) | 1280 px | NOT RUN |
-| Firefox (current) | 1280 px | NOT RUN |
-| Safari (current) | 1280 px | NOT RUN |
-| Any of the above | 320 px | NOT RUN |
+| Chromium 158 (headless) | 1280 px | Checked, all criteria PASS |
+| Chromium 158 (headless) | 320 px | Checked, all criteria PASS |
+| Firefox | any | NOT RUN (not available in the sandbox) |
+| Safari / WebKit | any | NOT RUN (not available in the sandbox) |
 
-No browser was available, so no browser, layout, or focus result is claimed as passed.
+Only Chromium was exercised. Firefox and Safari remain for the owner to check.
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|---|---|---|
-| 1 | 2+3=5, 7-4=3, 6*4=24, 8/2=4 | PASS (automated) | Displays "5", "3", "24", "4" |
-| 2a | 0.1+0.2= shows 0.3 | PASS (automated) | Displays "0.3" |
-| 2b | 1 . . 5 shows 1.5 | PASS (automated) | Displays "1.5" |
-| 3 | 2+3*4= shows 20 | PASS (automated) | Displays "20" (left to right) |
-| 4a | 8/0= shows a readable error | PASS (automated) | Displays "Cannot divide by zero" |
-| 4b | Clear shows 0, then 1+1= shows 2 | PASS (automated) | Displays "0", then "2" (state only; no page reload involved) |
-| 5a | On-screen 6*4= shows 24 | PASS (automated) | Logic level; button click wiring NOT RUN in a browser |
-| 5b | Keyboard 6, *, 4, Enter shows 24 | PASS (automated) | `keyFromEvent` maps to 6,*,4,=; displays "24". Real key events NOT RUN |
-| 5c | Clear button and Escape reset to 0 | PASS (automated) | Escape maps to C and displays "0". Button click NOT RUN |
-| 5d | Visible focus on every button via Tab | NOT RUN | CSS has `.key:focus-visible` outline (code review only) |
-| 6 | 320 px width, no horizontal scroll | NOT RUN | CSS uses a 4-column fluid grid and a `max-width: 360px` media query (code review only) |
+Each result below was observed through the real page. Buttons were clicked with Playwright, and keyboard input was sent as real key presses. Both viewport widths are listed.
+
+| # | Criterion | 1280 px | 320 px | Observed |
+|---|---|---|---|---|
+| 1a | 2 + 3 = shows 5 | PASS | PASS | "5" |
+| 1b | 7 − 4 = shows 3 | PASS | PASS | "3" |
+| 1c | 6 × 4 = shows 24 | PASS | PASS | "24" |
+| 1d | 8 ÷ 2 = shows 4 | PASS | PASS | "4" |
+| 2a | 0.1 + 0.2 = shows 0.3 | PASS | PASS | "0.3" |
+| 2b | 1 . . 5 shows 1.5 | PASS | PASS | "1.5" |
+| 3 | 2 + 3 × 4 = shows 20 | PASS | PASS | "20" (left to right) |
+| 4a | 8 ÷ 0 = shows a readable error | PASS | PASS | "Cannot divide by zero" |
+| 4b | Clear shows 0, then 1 + 1 = shows 2, no reload | PASS | PASS | "0", then "2" in the same page session, no reload between steps |
+| 5a | On-screen 6 × 4 = shows 24 | PASS | PASS | Button clicks produce "24" |
+| 5b | Keyboard 6, *, 4, Enter shows 24 | PASS | PASS | Real key presses with no button focused produce "24" |
+| 5c | Clear button and Escape reset to 0 | PASS | PASS | Clear button click gives "0"; Escape gives "0" |
+| 5d | Visible focus on every button via Tab | PASS | PASS | Tab reached all 17 buttons; each matched `:focus-visible` with a computed outline of at least 2 px |
+| 6 | 320 px: no horizontal scrolling, controls usable | n/a | PASS | At 320 px: scrollWidth 320 = clientWidth 320, and every button and the display lie inside the viewport. At 1280 px: scrollWidth 1280 = clientWidth 1280 |
+
+Limits of these checks:
+
+- 5d was checked programmatically through computed styles. No screenshot was inspected, so owner review of the outline's appearance is still welcome.
+- Criterion 6 "usable" was checked as in-viewport and at least 20 × 30 px per control, not by touch testing on a real device.
 
 ## Failures
 
-None observed. Criteria marked NOT RUN are unverified, not passed.
+None observed in Chromium at 1280 px or 320 px. Firefox and Safari were not checked.
 
-## Manual steps for the owner
+## Manual steps for the owner (remaining browsers)
 
 1. Run `npm test` and confirm 0 failures.
-2. Serve the repository root statically (for example `python3 -m http.server`) and open `index.html` in each browser listed above.
+2. Serve the repository root statically (for example `python3 -m http.server`) and open `index.html` in Firefox and Safari.
 3. Click 6, ×, 4, = and confirm 24. Click C and confirm 0.
 4. Press 6, *, 4, Enter and confirm 24. Press Escape and confirm 0.
 5. Press Tab repeatedly and confirm every button shows a visible focus outline.
-6. Set the viewport to 320 px wide (devtools device mode). Confirm no horizontal scrollbar and that every key is reachable and tappable.
-7. Enter 8, ÷, 0, = and confirm the error message. Press C, then 1 + 1 = and confirm 2 without reloading.
+6. Set the viewport to 320 px wide. Confirm no horizontal scrollbar and that every key is reachable.
+7. Enter 8, ÷, 0, = and confirm the error. Press C, then 1 + 1 = and confirm 2 without reloading.
 
 If any step fails, record the browser, viewport width, exact keys pressed, expected result, and actual result here.
