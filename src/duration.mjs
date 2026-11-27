@@ -1,3 +1,6 @@
 import ms from 'ms';
 
-console.log(`Duration: ${ms(90000)}`);
+const duration = 90000;
+
+console.log(`Duration: ${ms(duration)}`);
+console.log(`Duration (long): ${ms(duration, { long: true })}`);
